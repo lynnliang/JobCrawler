@@ -6,33 +6,7 @@ import time
 from html.parser import HTMLParser
 from pyquery import PyQuery as pyquery
 import json
-
-# #定义HTMLParser的子类,用以复写HTMLParser中的方法
-# class MyHTMLParser(HTMLParser):
- 
-#     #构造方法,定义data数组用来存储html中的数据
-#     def __init__(self):
-#         HTMLParser.__init__(self)
-#         self.data = []
- 
-#     #覆盖starttag方法,可以进行一些打印操作
-#     def handle_starttag(self, tag, attrs):
-#         pass
-#         #print("Start Tag: ",tag)
-#         #for attr in attrs:
-#         #   print(attr)
-     
-#     #覆盖endtag方法
-#     def handle_endtag(self, tag):
-#         pass
- 
-#     #覆盖handle_data方法,用来处理获取的html数据,这里保存在data数组
-#     def handle_data(self, data):
-#         if data.count('\n') == 0:
-#             self.data.append(data)
-
-# parser = MyHTMLParser() 
-
+import sqlite3
 
 
 # regular exp.
@@ -72,6 +46,7 @@ html_parser = HTMLParser()
 
 def getWebsiteContent(website):
 	html = requests.get(website)
+	time.sleep(2)
 	contents = ' '.join(html.content.decode('utf8').split())
 	originContent = html_parser.unescape(contents)
 	# py = pyquery(website)
@@ -81,22 +56,26 @@ def getWebsiteContent(website):
 
 
 def getTitle(html):
-	title = re.findall('<h1 class="jobtitle">(.*?)</h1>',html)
-
+	# title = re.findall('<h1 class="jobtitle">(.*?)</h1>',html)
+	py = pyquery(html)
+	title = py('.jobtitle').text()
+	# print(title)
 	return title
 
 def getJobContent(html):
-	content2 = str("")
+	# content2 = str("")
 	# content = re.findall('<div class="templatetext">(.*?)</div><div class="details">[.*]</div>)',html)
-	content = re.findall('(<div class="templatetext">.*?)<div class="details">',html)
-	if len(content)==0:
-		return content2
-
-	py = pyquery(content[0])
-	content1 = py('div').text()
-	content2 = str(content1)		
+	# content = re.findall('(<div class="templatetext">.*?) <div class="details">',html)
+	# if len(content)==0:
+	# 	return content2
+	# print(content)
+	py = pyquery(html)
+	content1 = py('.templatetext').text().encode('ascii', 'ignore').decode('ascii')
+	content2 = str(content1)	
+	# print(content2)	
 	# content = re.findall('<div class="templatetext">(.*?)<div class="details">[.*?]</div></div>',html)
 	return content2
+
 
 # website address of online jobs
 basicWebsite = "https://www.seek.co.nz/jobs-in-information-communication-technology/testing-quality-assurance/in-All-New-Zealand"
@@ -107,15 +86,44 @@ basicPrifix = "https://www.seek.co.nz/job/"
 
 if __name__ == '__main__':
 	#get the total num of search results
+	# jobLink = "33805061"
+	# jobAddress = basicPrifix+jobLink
+	# pageContent = getWebsiteContent(jobAddress)
+	# strTitle = str(getTitle(pageContent))
+	# fileName = jobLink + '.txt'
+	# file = open(fileName,'w')
+	# if len(strTitle)==0:
+	# 	print("no title found! job id is: " + jobLink)
+
+	# title = strTitle.strip()+"("+str(jobLink)+")"
+	# file.write(title)
+
+	# jobContent = getJobContent(pageContent)
+	# if len(jobContent)==0:
+	# 	print("no job content found! job id is: " + jobLink)
+	# # print(jobContent)
+	# # jobContent = format(jobContent.encode('iso-8859-1', 'ignore'))
+	# jobContent = format(jobContent)
+	# file.write(jobContent)
+
+	# file.flush()
+	# file.close()
+
 	pageNum = getTotalPage(basicWebsite)
-	pageNum = 1
+	pageNum =1
 	page = 1
 	# html = requests.get("https://www.seek.co.nz/job/33846987")
 	# file = open('out.txt','w')
 	# file.write(str(html.content))
 	# file.close()
+	conn = sqlite3.connect('onlineJobs.sqlite')
+	cur = conn.cursor()
+	cur.execute('''CREATE TABLE IF NOT EXISTS OriginJobContent 
+    	(uid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, url TEXT UNIQUE, title TEXT, 
+    	 content TEXT)''')
+	print("DB connected!")
 
-	file = open ('jobContent.txt','w')
+	# file = open ('jobContent.txt','w')
 	while(page<=pageNum):
 		page += 1
 		site = websitePrifix + str(page)
@@ -124,24 +132,41 @@ if __name__ == '__main__':
 		for jobLink in jobSet:
 			jobAddress = basicPrifix + jobLink
 			pageContent = getWebsiteContent(jobAddress)
+			time.sleep(1)
 			strTitle = getTitle(pageContent)
-			if len(strTitle) > 0:
-				title = str(strTitle[0]) + "(" + str(jobLink) + ")"
-				
+			# fileName = jobLink + '.txt'
+			# file = open(fileName,'w')
+			if len(strTitle) == 0:
+				print("no title found! job id is: " + jobLink + "search again!")
+				strTitle = getTitle(pageContent)
+
+			title = strTitle.strip()
+			# title = strTitle.strip() + "(" + str(jobLink) + ")" + "\n"
+			# file.write(title)
+			
 			jobContent = getJobContent(pageContent)
 			# print(jobContent)
 			# write them into file
-			if len(jobContent) > 0:
+			if len(jobContent) == 0:
+				print("no job content found! job id is: " + jobLink+ "search again!")
+				jobContent = getJobContent(pageContent)
+
 				# string = jobContent.replace('\u2013','')
-				jobContent = str(jobContent.encode('iso-8859-1', 'ignore'))
-				file.write(jobContent)
-				file.write("\n\n")
-				# if isinstance(jobContent,basestring):
-				# 	string = jobContent.encode('utf-8')
-				# else:
-				# 	string = unicode(jobContent).encode('utf-8')
-				# file.write(string)
+				# jobContent = str(jobContent.encode('iso-8859-1', 'ignore'))
+			# jobContent = format(content.encode('iso-8859-1', 'ignore'))
 
+			cur.execute('''INSERT OR IGNORE INTO OriginJobContent(uid,url,title,content) 
+				VALUES ( ?, ?, ?, ? )''', (jobLink, jobAddress, title, jobContent, ) )
+			cur.execute('SELECT uid FROM OriginJobContent WHERE (url==(?))',(jobAddress,))
+			job_id = cur.fetchone()[0]
+			# print(job_id)
 
-	file.flush()
-	file.close()
+			# jobC = str(content)
+			# file.write(jobC)
+			# file.write("\n\n")
+			# file.flush()
+			# file.close()
+
+	conn.commit()
+	cur.close()
+	print("Process finished")
